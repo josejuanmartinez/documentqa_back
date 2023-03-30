@@ -1,0 +1,6 @@
+langchain==0.0.126
+pypdf==3.7.0
+fastapi==0.95.0
+python-multipart==0.0.6
+uvicorn==0.21.1
+#chromadb==0.3.14
