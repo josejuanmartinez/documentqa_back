@@ -1,5 +1,5 @@
 langchain==0.0.127
-pypdf==3.7.0
+# pypdf==3.7.0
 fastapi==0.95.0
 python-multipart==0.0.6
 uvicorn==0.21.1
@@ -7,3 +7,7 @@ chromadb==0.3.17
 numpy==1.24.2
 pydantic~=1.10.7
 openai==0.27.2
+PyMuPDF==1.21.1
+pandas==1.5.3
+pyarrow==11.0.0
+#faiss

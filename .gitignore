@@ -130,3 +130,7 @@ dmypy.json
 
 # Secrets
 app_secrets.py
+
+# Indexes
+indexes
+tmp
