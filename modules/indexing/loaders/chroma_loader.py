@@ -3,8 +3,8 @@ import os
 from langchain.document_loaders import PyMuPDFLoader, TextLoader
 
 from constants.consts import TMP_DIR
-from modules.splitters.paragraph_splitter import ParagraphSplitter
-from modules.splitters.sentence_splitter import SentenceSplitter
+
+from modules.splitters.splitter import Splitter
 from vector_stores.chroma_store import ChromaVectorStore
 
 import pandas as pd
@@ -26,44 +26,46 @@ class ChromaLoader:
             df = pd.read_parquet('indexes/chroma-embeddings.parquet')
             logging.debug(f"CHROMA EMBEDDINGS:\n{df.to_json()}")
 
-    def index_pdf(self, pdf_bytes):
-        hash_file = f"{abs(hash(str(pdf_bytes)))}.tmp"
-        filename = f"{TMP_DIR}{hash_file}"
+    def index_pdf(self, pdf_bytes: bytes, filename: str, separator: str = None, chunk_size: int = None,
+                  chunk_overlap: int = None):
+        # hash_file = f"{abs(hash(str(pdf_bytes)))}.tmp"
+        dir_filename = f"{TMP_DIR}{filename}"
         try:
-            with open(filename, 'wb') as f:
+            with open(dir_filename, 'wb') as f:
                 f.write(pdf_bytes)
-            loader = PyMuPDFLoader(filename)
+            loader = PyMuPDFLoader(dir_filename)
             docs = loader.load()
             for d in docs:
                 d.metadata['uploaded_filename'] = filename
-            docs = SentenceSplitter().split(docs)
+            docs = Splitter(separator, chunk_size, chunk_overlap).split(docs)
             self.store.add_documents(docs)
         except Exception as e:
-            if os.path.exists(filename):
-                os.remove(filename)
+            if os.path.exists(dir_filename):
+                os.remove(dir_filename)
             raise e
-        if os.path.exists(filename):
-            os.remove(filename)
+        if os.path.exists(dir_filename):
+            os.remove(dir_filename)
 
-    def index_text(self, text):
-        hash_file = f"{abs(hash(str(text)))}.tmp"
-        filename = f"{TMP_DIR}{hash_file}"
+    def index_text(self, text: str, filename: str, separator: str = None, chunk_size: int = None,
+                   chunk_overlap: int = None):
+        # hash_file = f"{abs(hash(text))}.tmp"
+        dir_filename = f"{TMP_DIR}{filename}"
         try:
-            with open(filename, 'w') as f:
+            with open(dir_filename, 'w', encoding='utf-8') as f:
                 f.write(text)
-            loader = TextLoader(filename)
+            loader = TextLoader(dir_filename)
             docs = loader.load()
             for d in docs:
                 d.metadata['uploaded_filename'] = filename
-            docs = SentenceSplitter().split(docs)
+            docs = Splitter(separator, chunk_size, chunk_overlap).split(docs)
             self.store.add_documents(docs)
         except Exception as e:
-            if os.path.exists(filename):
-                os.remove(filename)
+            if os.path.exists(dir_filename):
+                os.remove(dir_filename)
             raise e
 
-        if os.path.exists(filename):
-            os.remove(filename)
+        if os.path.exists(dir_filename):
+            os.remove(dir_filename)
 
-    def qa(self, query):
+    def qa(self, query: str):
         return self.store.similarity_search(query)
