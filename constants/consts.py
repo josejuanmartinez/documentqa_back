@@ -1,8 +1,15 @@
+# Server configuration
+HOST = "0.0.0.0"
+PORT = 5000
+
+# ChromaDB configuration
 COLLECTION = "sintetic"
-TMP_DIR = 'tmp/'
 PERSIST_DIR = 'indexes'
-CHUNK_PREFIX = "chunk"
+
+# Tmp folder
+TMP_DIR = 'tmp/'
+
+# LangChain
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 NEWLINE = "\n"
-NEWPAR = "\n\n"
