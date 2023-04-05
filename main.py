@@ -13,12 +13,27 @@ from fastapi import FastAPI, UploadFile, Query
 
 from models.responses.generic_schema import GenericSchema
 from modules.pdf.PDFExtractor import PDFExtractor
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*']
+)
+
 secrets = Secrets.setup()
 logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
 
 loader = ChromaLoader(COLLECTION)
+
+
+@app.get("/healthcheck", status_code=200)
+async def healthcheck():
+    """
+    This endpoint is meant to provide a reliable method to check if the back end is up and running.
+    """
+    return GenericSchema(message="Healthy", result="", code=response_codes.SUCCESS)
 
 
 @app.post("/process_pdf")
