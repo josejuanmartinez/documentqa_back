@@ -1,6 +1,6 @@
 import logging
 from io import BytesIO
-from typing import Union
+from typing import Union, Annotated
 
 from constants import response_codes
 from constants.consts import COLLECTION, HOST, PORT
@@ -9,7 +9,7 @@ from modules.indexing.querier import Querier
 from app_secrets import Secrets
 
 import uvicorn
-from fastapi import FastAPI, UploadFile, Query
+from fastapi import FastAPI, UploadFile, Query, Form
 
 from models.responses.generic_schema import GenericSchema
 from modules.pdf.PDFExtractor import PDFExtractor
@@ -37,21 +37,21 @@ async def healthcheck():
 
 
 @app.post("/process_pdf")
-async def process_pdf(file: UploadFile = Query(None, description="Your PDF file to calculate embeddings and index "
-                                                                 "them"),
-                      separator: Union[str, None] = Query(None, description="The separator to split your document in "
-                                                                            "smaller chunks to be indexed. By "
-                                                                            "default, '\n' since PDF extractors often "
-                                                                            "remove multiple '\n'"),
-                      chunk_size: Union[int, None] = Query(None, description="After splitting `file` into chunks by "
-                                                                             "using `separator`, we create small "
-                                                                             "chunks of `chunk_size`. By default, "
-                                                                             "500."),
-                      chunk_overlap: Union[int, None] = Query(None, description="In order to take context into "
-                                                                                "consideration, chunks also get a "
-                                                                                "surrounding context of a total of "
-                                                                                "`chunk_overlap` previous and "
-                                                                                "following characters")
+async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or pdf file to calculate embeddings and "
+                                                                   "index them.")],
+                      separator: Annotated[Union[str, None], Form(description="The separator to split your document in "
+                                                                              "smaller chunks to be indexed. By "
+                                                                              "default, '\n' since PDF extractors often"
+                                                                              " remove multiple '\n'")],
+                      chunk_size: Annotated[Union[int, None], Form(description="After splitting `file` into chunks by "
+                                                                               "using `separator`, we create small "
+                                                                               "chunks of `chunk_size`. By default, "
+                                                                               "500.")],
+                      chunk_overlap: Annotated[Union[int, None], Form(description="In order to take context into "
+                                                                                  "consideration, chunks also get a "
+                                                                                  "surrounding context of a total of "
+                                                                                  "`chunk_overlap` previous and "
+                                                                                  "following characters")]
                       ):
     """
     This endpoint receives a pdf file and indexes its embeddings in the configured vector store (by default, ChromaDB)
@@ -69,6 +69,8 @@ async def process_pdf(file: UploadFile = Query(None, description="Your PDF file 
     Returns:\n\n
          a json response with fields: message, code, result
     """
+    if file is None:
+        return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
     filename = file.filename
     extension = filename.split('.')[-1]
     if extension.lower() == 'pdf':
@@ -87,22 +89,22 @@ async def process_pdf(file: UploadFile = Query(None, description="Your PDF file 
         return GenericSchema(message=str(e), result="", code=response_codes.EXCEPTION)
 
 
-@app.post("/process_text", tags=['process_text'])
-async def process_text(file: UploadFile = Query(None, description="Your txt or pdf file to calculate embeddings and "
-                                                                  "index them."),
-                       separator: Union[str, None] = Query(None, description="The separator to split your document in "
-                                                                             "smaller chunks to be indexed. By "
-                                                                             "default, '\n' since PDF extractors often "
-                                                                             "remove multiple '\n'"),
-                       chunk_size: Union[int, None] = Query(None, description="After splitting `file` into chunks by "
-                                                                              "using `separator`, we create small "
-                                                                              "chunks of `chunk_size`. By default, "
-                                                                              "500."),
-                       chunk_overlap: Union[int, None] = Query(None, description="In order to take context into "
-                                                                                 "consideration, chunks also get a "
-                                                                                 "surrounding context of a total of "
-                                                                                 "`chunk_overlap` previous and "
-                                                                                 "following characters")
+@app.post("/process_text")
+async def process_text(file: Annotated[UploadFile, Form(description="Your txt or pdf file to calculate embeddings and "
+                                                                    "index them.")],
+                       separator: Annotated[Union[str, None], Form(description="The separator to split your document in"
+                                                                               " smaller chunks to be indexed. By "
+                                                                               "default, '\n' since PDF extractors "
+                                                                               "often remove multiple '\n'")],
+                       chunk_size: Annotated[Union[int, None], Form(description="After splitting `file` into chunks by "
+                                                                                "using `separator`, we create small "
+                                                                                "chunks of `chunk_size`. By default, "
+                                                                                "500.")],
+                       chunk_overlap: Annotated[Union[int, None], Form(description="In order to take context into "
+                                                                                   "consideration, chunks also get a "
+                                                                                   "surrounding context of a total of "
+                                                                                   "`chunk_overlap` previous and "
+                                                                                   "following characters")]
                        ):
     """
      This endpoint receives a txt file and indexes its embeddings in the configured vector store (by default, ChromaDB).
