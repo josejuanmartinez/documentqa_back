@@ -144,14 +144,19 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
         return GenericSchema(message=e, result="", code=response_codes.EXCEPTION)
 
 
-@app.get("/query", tags=['query'])
-async def query(question: str = Query(None, description="The search you want to do in Natural Language.")):
+@app.post("/query")
+async def query(question: Annotated[str, Form(description="Question or query to retrieve information from"
+                                                          "your vector store")],
+                context: Annotated[Union[str, None], Form(description="Any previous context to take into account")],
+                items: Annotated[Union[int, None], Form(description="Number of items to retrieve")]):
     """
         This endpoint will trigger your Vector Store database looking for the min cosine distance towards all the chunks
         previously indexed.
 
     Args:\n\n
-    - `question`: The search you want to do in Natural Language.
+    - `question`: Question or query to retrieve information from your vector store
+    - `context`: Any previous context to take into account
+    - `items`: Number of items to retrieve
 
     Returns:\n\n
         a json response with fields: `message`, `code` and `result`
@@ -160,7 +165,7 @@ async def query(question: str = Query(None, description="The search you want to 
 
     try:
         querier = Querier(loader)
-        result = querier.retrieve_first(question)
+        result = querier.retrieve_first(question, context, items)
 
         return GenericSchema(message=f"Processed: `{question}`", result=result,
                              code=response_codes.SUCCESS)

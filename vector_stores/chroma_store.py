@@ -24,5 +24,8 @@ class ChromaVectorStore:
         self.vector_store = None
         self.vector_store = Chroma(self.collection, self.embeddings, persist_directory=PERSIST_DIR)
 
-    def similarity_search(self, query):
-        return self.vector_store.similarity_search(query)
+    def similarity_search(self, query: str, items: int = None):
+        if items is not None:
+            return self.vector_store.similarity_search(query, k=items)
+        else:
+            return self.vector_store.similarity_search(query)

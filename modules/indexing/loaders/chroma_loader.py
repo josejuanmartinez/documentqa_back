@@ -67,5 +67,9 @@ class ChromaLoader:
         if os.path.exists(dir_filename):
             os.remove(dir_filename)
 
-    def qa(self, query: str):
-        return self.store.similarity_search(query)
+    def qa(self, query: str, context: str = None, items: int = None):
+        query = f"Can you retrieve the answer to this question? {query}"
+        if context is not None:
+            query = f"Take into consideration this context: {context}.\n\n. {query}"
+
+        return self.store.similarity_search(query, items)
