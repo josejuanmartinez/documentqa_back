@@ -53,7 +53,7 @@ class ChromaLoader:
         try:
             with open(dir_filename, 'w', encoding='utf-8') as f:
                 f.write(text)
-            loader = TextLoader(dir_filename)
+            loader = TextLoader(dir_filename, encoding='utf-8')
             docs = loader.load()
             for d in docs:
                 d.metadata['uploaded_filename'] = filename

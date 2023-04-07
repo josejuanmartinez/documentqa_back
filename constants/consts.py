@@ -13,3 +13,4 @@ TMP_DIR = 'tmp/'
 CHUNK_SIZE = 100
 CHUNK_OVERLAP = 50
 NEWLINE = "\n"
+PARAGRAPH = "\n\n"

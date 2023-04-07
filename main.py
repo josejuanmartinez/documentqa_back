@@ -74,6 +74,7 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
         return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
     filename = file.filename
     extension = filename.split('.')[-1]
+    separator = separator.replace("\r", "")
     if extension.lower() == 'pdf':
         contents = await file.read()
     else:
@@ -125,12 +126,13 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
      """
     filename = file.filename
     extension = filename.split('.')[-1]
+    separator = separator.replace("\r", "")
     if extension.lower() == 'txt':
         contents = await file.read()
     elif extension.lower() == 'pdf':
         content_bytes = await file.read()
         content_bytes_io = BytesIO(content_bytes)
-        contents = PDFExtractor.extract(content_bytes_io)
+        contents = PDFExtractor.extract(content_bytes_io, separator)
     else:
         return GenericSchema(message="Only txt of pdf files supported at this point", result="",
                              code=response_codes.INVALID_FORMAT)
@@ -169,11 +171,13 @@ async def query(question: Annotated[str, Form(description="Question or query to 
         result = querier.retrieve(question, context, items)
         dict_result = []
         for r in result:
-            partial = {'answer': r.page_content, 'filename': r.metadata['uploaded_filename'],
-                       'title': r.metadata['title'],
-                       'author': r.metadata['author'],
-                       'page_number': r.metadata['page_number'],
-                       'total_pages': r.metadata['total_pages']}
+            partial = {'answer': r.page_content,
+                       'filename': r.metadata['uploaded_filename'],
+                       'title': r.metadata['title'] if 'title' in r.metadata else '',
+                       'author': r.metadata['author'] if 'author' in r.metadata else '',
+                       'page_number': r.metadata['page_number'] if 'page_number' in r.metadata else '',
+                       'total_pages': r.metadata['total_pages'] if 'total_pages' in r.metadata else '',
+                       }
             dict_result.append(partial)
         return GenericSchema(message=f"Processed: `{question}`", result=json.dumps(dict_result),
                              code=response_codes.SUCCESS)

@@ -1,5 +1,5 @@
 from typing import IO
-
+import re
 from pypdf import PdfReader
 
 
@@ -11,9 +11,16 @@ class PDFExtractor:
         pass
 
     @staticmethod
-    def extract(file: IO):
+    def normalize_spaces(text:str) -> str:
+        text = text.replace('\r\n', '\n')
+        text = re.sub(r'[ \t]+\n', '\n', text)
+        return text
+
+    @staticmethod
+    def extract(file: IO, separator: str) -> str:
         reader = PdfReader(file)
         text = []
         for i, page in enumerate(reader.pages):
-            text.append(page.extract_text())
+            page_text = PDFExtractor.normalize_spaces(page.extract_text())
+            text.append(page_text)
         return "".join(text)
