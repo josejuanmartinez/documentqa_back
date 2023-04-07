@@ -10,6 +10,6 @@ PERSIST_DIR = 'indexes'
 TMP_DIR = 'tmp/'
 
 # LangChain
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 100
+CHUNK_OVERLAP = 50
 NEWLINE = "\n"

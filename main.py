@@ -1,6 +1,7 @@
+import json
 import logging
 from io import BytesIO
-from typing import Union, Annotated
+from typing import Union, Annotated, Optional
 
 from constants import response_codes
 from constants.consts import COLLECTION, HOST, PORT
@@ -141,14 +142,14 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
                              code=response_codes.SUCCESS)
 
     except Exception as e:
-        return GenericSchema(message=e, result="", code=response_codes.EXCEPTION)
+        return GenericSchema(message=str(e), result="", code=response_codes.EXCEPTION)
 
 
 @app.post("/query")
 async def query(question: Annotated[str, Form(description="Question or query to retrieve information from"
                                                           "your vector store")],
-                context: Annotated[Union[str, None], Form(description="Any previous context to take into account")],
-                items: Annotated[Union[int, None], Form(description="Number of items to retrieve")]):
+                context: Optional[str] = Form(None, description="Any previous context to take into account"),
+                items: Optional[int] = Form(None, description="Number of items to retrieve")):
     """
         This endpoint will trigger your Vector Store database looking for the min cosine distance towards all the chunks
         previously indexed.
@@ -159,19 +160,26 @@ async def query(question: Annotated[str, Form(description="Question or query to 
     - `items`: Number of items to retrieve
 
     Returns:\n\n
-        a json response with fields: `message`, `code` and `result`
+        a json response with fields: `message`, `code` and `res ult`
     """
     logging.info(f"Triggering {question} towards the index")
 
     try:
         querier = Querier(loader)
-        result = querier.retrieve_first(question, context, items)
-
-        return GenericSchema(message=f"Processed: `{question}`", result=result,
+        result = querier.retrieve(question, context, items)
+        dict_result = []
+        for r in result:
+            partial = {'answer': r.page_content, 'filename': r.metadata['uploaded_filename'],
+                       'title': r.metadata['title'],
+                       'author': r.metadata['author'],
+                       'page_number': r.metadata['page_number'],
+                       'total_pages': r.metadata['total_pages']}
+            dict_result.append(partial)
+        return GenericSchema(message=f"Processed: `{question}`", result=json.dumps(dict_result),
                              code=response_codes.SUCCESS)
 
     except Exception as e:
-        return GenericSchema(message=e, result="", code=response_codes.EXCEPTION)
+        return GenericSchema(message=str(e), result="", code=response_codes.EXCEPTION)
 
 
 if __name__ == "__main__":
