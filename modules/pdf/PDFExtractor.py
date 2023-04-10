@@ -17,7 +17,7 @@ class PDFExtractor:
         return text
 
     @staticmethod
-    def extract(file: IO, separator: str) -> str:
+    def extract(file: IO) -> str:
         reader = PdfReader(file)
         text = []
         for i, page in enumerate(reader.pages):

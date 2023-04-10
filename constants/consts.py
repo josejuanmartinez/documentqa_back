@@ -12,5 +12,8 @@ TMP_DIR = 'tmp/'
 # LangChain
 CHUNK_SIZE = 100
 CHUNK_OVERLAP = 50
-NEWLINE = "\n"
+NEWLINE = ".\n"
 PARAGRAPH = "\n\n"
+
+# To detect if a document has \n\n or just \n, I check how big are the splits by '\n\n'
+AVG_SIZE_OF_PARAGRAPH = 1000

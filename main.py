@@ -3,8 +3,10 @@ import logging
 from io import BytesIO
 from typing import Union, Annotated, Optional
 
+from starlette.middleware.errors import LINE
+
 from constants import response_codes
-from constants.consts import COLLECTION, HOST, PORT
+from constants.consts import COLLECTION, HOST, PORT, PARAGRAPH
 from modules.indexing.loaders.chroma_loader import ChromaLoader
 from modules.indexing.querier import Querier
 from app_secrets import Secrets
@@ -74,7 +76,6 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
         return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
     filename = file.filename
     extension = filename.split('.')[-1]
-    separator = separator.replace("\r", "")
     if extension.lower() == 'pdf':
         contents = await file.read()
     else:
@@ -83,6 +84,7 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
     logging.info(f"Processing {filename} with separator={separator}, chunk_size={chunk_size} and "
                  f"chunk_overlap={chunk_overlap}")
     try:
+        separator = separator.replace("\r", "")
         loader.index_pdf(contents, filename, separator, chunk_size, chunk_overlap)
         return GenericSchema(message=f"{filename} was successfully processed", result="",
                              code=response_codes.SUCCESS)
@@ -126,19 +128,19 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
      """
     filename = file.filename
     extension = filename.split('.')[-1]
-    separator = separator.replace("\r", "")
     if extension.lower() == 'txt':
         contents = await file.read()
     elif extension.lower() == 'pdf':
         content_bytes = await file.read()
         content_bytes_io = BytesIO(content_bytes)
-        contents = PDFExtractor.extract(content_bytes_io, separator)
+        contents = PDFExtractor.extract(content_bytes_io)
     else:
         return GenericSchema(message="Only txt of pdf files supported at this point", result="",
                              code=response_codes.INVALID_FORMAT)
     logging.info(f"Processing {filename} with separator={separator}, chunk_size={chunk_size} and "
                  f"chunk_overlap={chunk_overlap}")
     try:
+        separator = separator.replace("\r", "")
         loader.index_text(contents, filename, separator, chunk_size, chunk_overlap)
         return GenericSchema(message=f"{filename} was successfully processed", result="",
                              code=response_codes.SUCCESS)

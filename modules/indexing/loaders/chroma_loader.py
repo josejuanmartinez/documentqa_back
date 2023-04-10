@@ -2,7 +2,8 @@ import logging
 import os
 from langchain.document_loaders import PyMuPDFLoader, TextLoader
 
-from constants.consts import TMP_DIR
+from constants.consts import TMP_DIR, PARAGRAPH
+from modules.normalizers.whitespace_normalizer import WhitespaceNormalizer
 
 from modules.splitters.splitter import Splitter
 from vector_stores.chroma_store import ChromaVectorStore
@@ -35,7 +36,9 @@ class ChromaLoader:
                 f.write(pdf_bytes)
             loader = PyMuPDFLoader(dir_filename)
             docs = loader.load()
+
             for d in docs:
+                d.page_content = WhitespaceNormalizer.normalize(d.page_content)
                 d.metadata['uploaded_filename'] = filename
             docs = Splitter(separator, chunk_size, chunk_overlap).split(docs)
             self.store.add_documents(docs)
@@ -56,6 +59,7 @@ class ChromaLoader:
             loader = TextLoader(dir_filename, encoding='utf-8')
             docs = loader.load()
             for d in docs:
+                d.page_content = WhitespaceNormalizer.normalize(d.page_content)
                 d.metadata['uploaded_filename'] = filename
             docs = Splitter(separator, chunk_size, chunk_overlap).split(docs)
             self.store.add_documents(docs)
