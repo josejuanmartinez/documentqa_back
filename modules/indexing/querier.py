@@ -12,13 +12,14 @@ class Querier:
         self.chain = load_qa_chain(llm=OpenAI())
         self.sources_chain = load_qa_with_sources_chain(llm=OpenAI())
 
-    def retrieve(self, query, context=None, items=None):
-        return self.loader.qa(query, context, items)
+    def retrieve(self, query: str, items: int = None) -> []:
+        """
+        Retrieves `items` number of answers from the vector store answering to the query.
+        Args:
+            query: the question
+            items: the number of items
 
-    """
-    def retrieve_first(self, query, only_text=False):
-        response_dict = {'text': self.loader.qa(query)[0].page_content, 'metadata': {}}
-        if not only_text:
-            response_dict['metadata'] = self.loader.qa(query)[0].metadata
-        return response_dict
-    """
+        Returns:
+            A list of rows from the vector store answering to that query
+        """
+        return self.loader.qa(query, items)

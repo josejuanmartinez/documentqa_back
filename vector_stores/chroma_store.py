@@ -26,6 +26,6 @@ class ChromaVectorStore:
 
     def similarity_search(self, query: str, items: int = None):
         if items is not None:
-            return self.vector_store.similarity_search(query, k=items)
+            return self.vector_store.similarity_search_with_score(query, k=items)
         else:
-            return self.vector_store.similarity_search(query)
+            return self.vector_store.similarity_search_with_score(query)

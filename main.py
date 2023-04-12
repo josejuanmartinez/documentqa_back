@@ -3,10 +3,12 @@ import logging
 from io import BytesIO
 from typing import Union, Annotated, Optional
 
-from starlette.middleware.errors import LINE
+import nltk
 
 from constants import response_codes
-from constants.consts import COLLECTION, HOST, PORT, PARAGRAPH
+from constants.consts import COLLECTION, HOST, PORT, PARAGRAPH, RELEVANT_THRESHOLD, \
+    NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER
+from modules.generators.answer_generator import AnswerGenerator
 from modules.indexing.loaders.chroma_loader import ChromaLoader
 from modules.indexing.querier import Querier
 from app_secrets import Secrets
@@ -17,6 +19,10 @@ from fastapi import FastAPI, UploadFile, Query, Form
 from models.responses.generic_schema import GenericSchema
 from modules.pdf.PDFExtractor import PDFExtractor
 from fastapi.middleware.cors import CORSMiddleware
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
 
 app = FastAPI()
 
@@ -37,6 +43,56 @@ async def healthcheck():
     This endpoint is meant to provide a reliable method to check if the back end is up and running.
     """
     return GenericSchema(message="Healthy", result="", code=response_codes.SUCCESS)
+
+
+@app.post("/lemmatize_stopwords")
+async def lemmatize_stopwords(text: Annotated[str, Form(description="String to return with stopwords removed")],
+                              lan: Annotated[str, Form(description="Language of the text")]):
+    """
+    This endpoint receives a string text and returns it lemmatized without any stopword.
+
+    Args:\n\n
+    - `text`: String to return with stopwords removed.
+    - `lan`: Language of the text.
+
+    Returns:\n\n
+         a json response with fields: message, code, result where  in result you have the string without stop words.
+    """
+    nltk.download('stopwords')
+    nltk.download('punkt')
+    nltk.download('wordnet')
+
+    lemmatizer = WordNetLemmatizer()
+    text_tokens = word_tokenize(text, language=lan)
+
+    result = " ".join([lemmatizer.lemmatize(word) for word in text_tokens
+                       if lemmatizer.lemmatize(word) not in stopwords.words(lan)])
+    return GenericSchema(message=f"Stopwords were successfully calculated", result=result,
+                         code=response_codes.SUCCESS)
+
+
+@app.post("/lemmatize")
+async def lemmatize(text: Annotated[str, Form(description="String to return with stopwords removed")],
+                    lan: Annotated[str, Form(description="Language of the text")]):
+    """
+    This endpoint receives a string text and returns it lemmatized.
+
+    Args:\n\n
+    - `text`: String to return lemmatized.
+    - `lan`: Language of the text.
+
+    Returns:\n\n
+         a json response with fields: message, code, result where  in result you have the string lemmatized.
+    """
+    nltk.download('punkt')
+    nltk.download('wordnet')
+
+    lemmatizer = WordNetLemmatizer()
+    text_tokens = word_tokenize(text, language=lan)
+
+    result = " ".join([lemmatizer.lemmatize(word) for word in text_tokens])
+    return GenericSchema(message=f"Lemmas were successfully calculated", result=result,
+                         code=response_codes.SUCCESS)
 
 
 @app.post("/process_pdf")
@@ -152,7 +208,6 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
 @app.post("/query")
 async def query(question: Annotated[str, Form(description="Question or query to retrieve information from"
                                                           "your vector store")],
-                context: Optional[str] = Form(None, description="Any previous context to take into account"),
                 items: Optional[int] = Form(None, description="Number of items to retrieve")):
     """
         This endpoint will trigger your Vector Store database looking for the min cosine distance towards all the chunks
@@ -160,28 +215,40 @@ async def query(question: Annotated[str, Form(description="Question or query to 
 
     Args:\n\n
     - `question`: Question or query to retrieve information from your vector store
-    - `context`: Any previous context to take into account
     - `items`: Number of items to retrieve
 
     Returns:\n\n
-        a json response with fields: `message`, `code` and `res ult`
+        a json response with fields: `message`, `code` and `result`
     """
     logging.info(f"Triggering {question} towards the index")
 
     try:
         querier = Querier(loader)
-        result = querier.retrieve(question, context, items)
+        results = querier.retrieve(question, items)
+        generator = AnswerGenerator()
+
+        relevant_results = [r.page_content.strip() for r, x in results if x <= RELEVANT_THRESHOLD]
+        contexted_answer = NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER
+        if len(relevant_results) > 0:
+            contexted_answer = generator.generate(question, relevant_results)
+
+        main_result = {}
+
         dict_result = []
-        for r in result:
-            partial = {'answer': r.page_content,
+        for r, score in results:
+            partial = {'answer': r.page_content.strip(),
                        'filename': r.metadata['uploaded_filename'],
                        'title': r.metadata['title'] if 'title' in r.metadata else '',
                        'author': r.metadata['author'] if 'author' in r.metadata else '',
                        'page_number': r.metadata['page_number'] if 'page_number' in r.metadata else '',
                        'total_pages': r.metadata['total_pages'] if 'total_pages' in r.metadata else '',
+                       'distance': round(score, 2),
+                       'is_relevant': score <= RELEVANT_THRESHOLD
                        }
             dict_result.append(partial)
-        return GenericSchema(message=f"Processed: `{question}`", result=json.dumps(dict_result),
+        main_result['contexted_answer'] = contexted_answer.strip()
+        main_result['answers'] = dict_result
+        return GenericSchema(message=f"Processed: `{question}`", result=json.dumps(main_result),
                              code=response_codes.SUCCESS)
 
     except Exception as e:
@@ -189,5 +256,5 @@ async def query(question: Annotated[str, Form(description="Question or query to 
 
 
 if __name__ == "__main__":
-    loader.show_collection_data()
+    # loader.show_collection_data()
     uvicorn.run(app, host=HOST, port=PORT)
