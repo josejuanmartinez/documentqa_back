@@ -1,20 +1,24 @@
 import json
 import logging
+import datetime
 from io import BytesIO
 from typing import Union, Annotated, Optional
 
+import keyring
 import nltk
+from starlette.responses import HTMLResponse
 
 from constants import response_codes
-from constants.consts import COLLECTION, HOST, PORT, PARAGRAPH, RELEVANT_THRESHOLD, \
-    NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER
+from constants.consts import COLLECTION, HOST, PORT, RELEVANT_THRESHOLD, \
+    NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER, AUTHENTICATED
+from constants.response_codes import LOGIN_FAILED
 from modules.generators.answer_generator import AnswerGenerator
 from modules.indexing.loaders.chroma_loader import ChromaLoader
 from modules.indexing.querier import Querier
 from app_secrets import Secrets
 
 import uvicorn
-from fastapi import FastAPI, UploadFile, Query, Form
+from fastapi import FastAPI, UploadFile, Form
 
 from models.responses.generic_schema import GenericSchema
 from modules.pdf.PDFExtractor import PDFExtractor
@@ -23,6 +27,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
+
+import jwt
+
+from users.add_key import SERVICE_ID
+
+# Define your secret key for signing the token
+SECRET_KEY = 'your_secret_key_here'
 
 app = FastAPI()
 
@@ -43,6 +54,28 @@ async def healthcheck():
     This endpoint is meant to provide a reliable method to check if the back end is up and running.
     """
     return GenericSchema(message="Healthy", result="", code=response_codes.SUCCESS)
+
+
+@app.post("/login", status_code=200)
+async def login(email: Annotated[str, Form(description="User email")],
+                password: Annotated[str, Form(description="User password")]):
+
+    # Define the payload for the token
+    payload = {'email': email, 'password': password}
+
+    if password != keyring.get_password(SERVICE_ID, email):
+        return GenericSchema(message=f"Login failed", result="",
+                             code=LOGIN_FAILED)
+
+    # Generate the JWT token
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    expires_in = datetime.datetime.utcnow() + datetime.timedelta(days=30)
+
+    timestamp = expires_in.timestamp()
+    return GenericSchema(message=f"Login successful", result={"token": token,
+                                                              "expiresIn": timestamp,
+                                                              "authUserState": AUTHENTICATED},
+                         code=response_codes.SUCCESS)
 
 
 @app.post("/lemmatize_stopwords")
@@ -68,7 +101,7 @@ async def lemmatize_stopwords(text: Annotated[str, Form(description="String to r
     result = " ".join([lemmatizer.lemmatize(word) for word in text_tokens
                        if lemmatizer.lemmatize(word) not in stopwords.words(lan)])
     return GenericSchema(message=f"Stopwords were successfully calculated", result=result,
-                         code=response_codes.SUCCESS)
+                         code=response_codes.LOGIN_FAILED)
 
 
 @app.post("/lemmatize")
@@ -208,13 +241,18 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
 @app.post("/query")
 async def query(question: Annotated[str, Form(description="Question or query to retrieve information from"
                                                           "your vector store")],
-                items: Optional[int] = Form(None, description="Number of items to retrieve")):
+                generate_answer: Annotated[str, Form(description="True if you want to generate an answer, False "
+                                                                 "otherwise")],
+                items: Optional[int] = Form(None, description="Number of items to retrieve"),
+                use_mockup_answer: Optional[str] = Form(None, description="True if you want to return a mockup answer, "
+                                                                          "False otherwise (testing purposes only)")):
     """
         This endpoint will trigger your Vector Store database looking for the min cosine distance towards all the chunks
         previously indexed.
 
     Args:\n\n
     - `question`: Question or query to retrieve information from your vector store
+    - `generate_answer`: True if you want to generate an answer using the results. False otherwise.
     - `items`: Number of items to retrieve
 
     Returns:\n\n
@@ -225,12 +263,20 @@ async def query(question: Annotated[str, Form(description="Question or query to 
     try:
         querier = Querier(loader)
         results = querier.retrieve(question, items)
-        generator = AnswerGenerator()
 
-        relevant_results = [r.page_content.strip() for r, x in results if x <= RELEVANT_THRESHOLD]
-        contexted_answer = NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER
-        if len(relevant_results) > 0:
-            contexted_answer = generator.generate(question, relevant_results)
+        generate_answer = str(generate_answer).lower() == "true"
+
+        contexted_answer = ""
+        if generate_answer:
+            generator = AnswerGenerator()
+
+            relevant_results = [r.page_content.strip() for r, x in results if x <= RELEVANT_THRESHOLD]
+            contexted_answer = NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER
+            if len(relevant_results) > 0:
+                if use_mockup_answer is not None and use_mockup_answer.lower() == "true":
+                    contexted_answer = generator.generate_mock(question, relevant_results)
+                else:
+                    contexted_answer = generator.generate(question, relevant_results)
 
         main_result = {}
 
