@@ -1,12 +1,11 @@
-import json
 import logging
 import datetime
+import os
 from io import BytesIO
 from typing import Union, Annotated, Optional
 
 import keyring
 import nltk
-from starlette.responses import HTMLResponse
 
 from constants import response_codes
 from constants.consts import COLLECTION, HOST, PORT, RELEVANT_THRESHOLD, \
@@ -32,20 +31,43 @@ import jwt
 
 from users.add_key import SERVICE_ID
 
-# Define your secret key for signing the token
-SECRET_KEY = 'your_secret_key_here'
+# SECRETS
+# =======
+print("Checking secrets...")
+if not Secrets.check():
+    exit(1)
+# =======
 
+# LOGGING
+# =======
+print("Configuring logger...")
+logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
+# =======
+
+
+# CHROMA
+# =======
+print("Setting up the vector store...")
+loader = ChromaLoader(COLLECTION)
+# =======
+
+# NLTK
+# =======
+print("Installing small NLTK tools...")
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
+# =======
+
+# FAST API
+# ========
+print("Preparing FastAPI...")
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*']
 )
-
-secrets = Secrets.setup()
-logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
-
-loader = ChromaLoader(COLLECTION)
+# =========
 
 
 @app.get("/healthcheck", status_code=200)
@@ -57,8 +79,18 @@ async def healthcheck():
 
 
 @app.post("/login", status_code=200)
-async def login(email: Annotated[str, Form(description="User email")],
-                password: Annotated[str, Form(description="User password")]):
+async def login(email: Annotated[str, Form(description="User's email")],
+                password: Annotated[str, Form(description="User's password")]):
+    """
+        This endpoint provides with login functionality based on email and password to be stored in keyring.
+
+    Args:\n\n
+        `email`: User's email
+        `password`: User's password
+
+    Returns:\n\n
+         a json response with fields: `message`, `code`, `result`
+    """
 
     # Define the payload for the token
     payload = {'email': email, 'password': password}
@@ -68,7 +100,7 @@ async def login(email: Annotated[str, Form(description="User email")],
                              code=LOGIN_FAILED)
 
     # Generate the JWT token
-    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    token = jwt.encode(payload, os.environ['KEYRING_SECRET_KEY'], algorithm='HS256')
     expires_in = datetime.datetime.utcnow() + datetime.timedelta(days=30)
 
     timestamp = expires_in.timestamp()
@@ -89,19 +121,19 @@ async def lemmatize_stopwords(text: Annotated[str, Form(description="String to r
     - `lan`: Language of the text.
 
     Returns:\n\n
-         a json response with fields: message, code, result where  in result you have the string without stop words.
+         a json response with fields: `message`, `code`, `result` where  in result you have the string without stop
+         words.
     """
-    nltk.download('stopwords')
-    nltk.download('punkt')
-    nltk.download('wordnet')
+    try:
+        lemmatizer = WordNetLemmatizer()
+        text_tokens = word_tokenize(text, language=lan)
 
-    lemmatizer = WordNetLemmatizer()
-    text_tokens = word_tokenize(text, language=lan)
-
-    result = " ".join([lemmatizer.lemmatize(word) for word in text_tokens
-                       if lemmatizer.lemmatize(word) not in stopwords.words(lan)])
-    return GenericSchema(message=f"Stopwords were successfully calculated", result=result,
-                         code=response_codes.LOGIN_FAILED)
+        result = " ".join([lemmatizer.lemmatize(word.lower()) for word in text_tokens
+                           if lemmatizer.lemmatize(word.lower()) not in stopwords.words(lan)])
+        return GenericSchema(message=f"Lemmas and Stopwords were successfully calculated", result=result,
+                             code=response_codes.SUCCESS)
+    except Exception as e:
+        return GenericSchema(message=str(e), result="", code=response_codes.EXCEPTION)
 
 
 @app.post("/lemmatize")
@@ -115,17 +147,17 @@ async def lemmatize(text: Annotated[str, Form(description="String to return with
     - `lan`: Language of the text.
 
     Returns:\n\n
-         a json response with fields: message, code, result where  in result you have the string lemmatized.
+         a json response with fields: `message`, `code`, `result` where  in result you have the string lemmatized.
     """
-    nltk.download('punkt')
-    nltk.download('wordnet')
+    try:
+        lemmatizer = WordNetLemmatizer()
+        text_tokens = word_tokenize(text, language=lan)
 
-    lemmatizer = WordNetLemmatizer()
-    text_tokens = word_tokenize(text, language=lan)
-
-    result = " ".join([lemmatizer.lemmatize(word) for word in text_tokens])
-    return GenericSchema(message=f"Lemmas were successfully calculated", result=result,
-                         code=response_codes.SUCCESS)
+        result = " ".join([lemmatizer.lemmatize(word.lower()) for word in text_tokens])
+        return GenericSchema(message=f"Lemmas were successfully calculated", result=result,
+                             code=response_codes.SUCCESS)
+    except Exception as e:
+        return GenericSchema(message=str(e), result="", code=response_codes.EXCEPTION)
 
 
 @app.post("/process_pdf")
@@ -159,7 +191,7 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
     **chunk_overlap** previous and following characters.\n
 
     Returns:\n\n
-         a json response with fields: message, code, result
+         a json response with fields: `message`, `code`, `result`
     """
     if file is None:
         return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
@@ -213,7 +245,7 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
      **chunk_overlap** previous and following characters.\n
 
      Returns:\n\n
-          a json response with fields: message, code, result
+          a json response with fields: `message`, `code`, `result`
      """
     filename = file.filename
     extension = filename.split('.')[-1]
@@ -256,7 +288,7 @@ async def query(question: Annotated[str, Form(description="Question or query to 
     - `items`: Number of items to retrieve
 
     Returns:\n\n
-        a json response with fields: `message`, `code` and `result`
+        a json response with fields: `message`, `code`, `result`
     """
     logging.info(f"Triggering {question} towards the index")
 
@@ -294,7 +326,7 @@ async def query(question: Annotated[str, Form(description="Question or query to 
             dict_result.append(partial)
         main_result['contexted_answer'] = contexted_answer.strip()
         main_result['answers'] = dict_result
-        return GenericSchema(message=f"Processed: `{question}`", result=json.dumps(main_result),
+        return GenericSchema(message=f"Processed: `{question}`", result=main_result,
                              code=response_codes.SUCCESS)
 
     except Exception as e:

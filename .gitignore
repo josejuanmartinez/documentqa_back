@@ -128,9 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Secrets
-app_secrets.py
-
 # Indexes
 indexes
 tmp
+
+.chroma
