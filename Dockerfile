@@ -1,12 +1,12 @@
 FROM python:3.9
 
+EXPOSE 5000
+
 RUN apt update
 
-RUN mkdir /usr/src/sintetic.ai
-RUN mkdir /usr/src/sintetic.ai/back
-RUN mkdir /usr/src/sintetic.ai/front
+RUN mkdir -p /usr/src/sintetic.ai/qa/back
 
-WORKDIR /usr/src/syntetic.ai/back
+WORKDIR /usr/src/syntetic.ai/qa/back
 
 COPY requirements.txt ./
 
