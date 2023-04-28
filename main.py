@@ -2,14 +2,14 @@ import logging
 import datetime
 import os
 from io import BytesIO
-from typing import Union, Annotated, Optional
+from typing import  Annotated, Optional
 
 import keyring
 import nltk
 
 from constants import response_codes
 from constants.consts import COLLECTION, HOST, PORT, RELEVANT_THRESHOLD, \
-    NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER, AUTHENTICATED
+    NOT_ENOUGH_RESULTS_TO_GENERATE_ANSWER, AUTHENTICATED, NEWLINE, CHUNK_SIZE, CHUNK_OVERLAP
 from constants.response_codes import LOGIN_FAILED
 from modules.generators.answer_generator import AnswerGenerator
 from modules.indexing.loaders.chroma_loader import ChromaLoader
@@ -67,6 +67,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=['*']
 )
+
+
 # =========
 
 
@@ -163,19 +165,16 @@ async def lemmatize(text: Annotated[str, Form(description="String to return with
 @app.post("/process_pdf")
 async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or pdf file to calculate embeddings and "
                                                                    "index them.")],
-                      separator: Annotated[Union[str, None], Form(description="The separator to split your document in "
-                                                                              "smaller chunks to be indexed. By "
-                                                                              "default, '\n' since PDF extractors often"
-                                                                              " remove multiple '\n'")],
-                      chunk_size: Annotated[Union[int, None], Form(description="After splitting `file` into chunks by "
+                      separator: Optional[str] = Form(NEWLINE, description="The separator to split your document in "
+                                                                           "smaller chunks to be indexed."),
+                      chunk_size: Optional[int] = Form(CHUNK_SIZE, description="After splitting `file` into chunks by "
                                                                                "using `separator`, we create small "
-                                                                               "chunks of `chunk_size`. By default, "
-                                                                               "500.")],
-                      chunk_overlap: Annotated[Union[int, None], Form(description="In order to take context into "
-                                                                                  "consideration, chunks also get a "
-                                                                                  "surrounding context of a total of "
-                                                                                  "`chunk_overlap` previous and "
-                                                                                  "following characters")]
+                                                                               "chunks of `chunk_size`."),
+                      chunk_overlap: Optional[int] = Form(CHUNK_OVERLAP, description="In order to take context into "
+                                                                                     "consideration, chunks also get a "
+                                                                                     "surrounding context of a total of"
+                                                                                     " `chunk_overlap` previous and "
+                                                                                     "following characters.")
                       ):
     """
     This endpoint receives a pdf file and indexes its embeddings in the configured vector store (by default, ChromaDB)
@@ -195,6 +194,13 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
     """
     if file is None:
         return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
+    if separator is None:
+        separator = NEWLINE
+    if chunk_size is None:
+        chunk_size = CHUNK_SIZE
+    if chunk_overlap is None:
+        chunk_overlap = CHUNK_OVERLAP
+
     filename = file.filename
     extension = filename.split('.')[-1]
     if extension.lower() == 'pdf':
@@ -217,20 +223,16 @@ async def process_pdf(file: Annotated[UploadFile, Form(description="Your txt or 
 @app.post("/process_text")
 async def process_text(file: Annotated[UploadFile, Form(description="Your txt or pdf file to calculate embeddings and "
                                                                     "index them.")],
-                       separator: Annotated[Union[str, None], Form(description="The separator to split your document in"
-                                                                               " smaller chunks to be indexed. By "
-                                                                               "default, '\n' since PDF extractors "
-                                                                               "often remove multiple '\n'")],
-                       chunk_size: Annotated[Union[int, None], Form(description="After splitting `file` into chunks by "
+                       separator: Optional[str] = Form(NEWLINE, description="The separator to split your document in "
+                                                                            "smaller chunks to be indexed."),
+                       chunk_size: Optional[int] = Form(CHUNK_SIZE, description="After splitting `file` into chunks by "
                                                                                 "using `separator`, we create small "
-                                                                                "chunks of `chunk_size`. By default, "
-                                                                                "500.")],
-                       chunk_overlap: Annotated[Union[int, None], Form(description="In order to take context into "
-                                                                                   "consideration, chunks also get a "
-                                                                                   "surrounding context of a total of "
-                                                                                   "`chunk_overlap` previous and "
-                                                                                   "following characters")]
-                       ):
+                                                                                "chunks of `chunk_size`"),
+                       chunk_overlap: Optional[int] = Form(CHUNK_OVERLAP, description="In order to take context into "
+                                                                                      "consideration, chunks also get a"
+                                                                                      " surrounding context of a total "
+                                                                                      "of `chunk_overlap` previous and "
+                                                                                      "following characters.")):
     """
      This endpoint receives a txt file and indexes its embeddings in the configured vector store (by default, ChromaDB).
      It can also receive a pdf file but it will convert it to text first using PyPDF.
@@ -247,6 +249,9 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
      Returns:\n\n
           a json response with fields: `message`, `code`, `result`
      """
+    if file is None:
+        return GenericSchema(message="File is None", result="", code=response_codes.EXCEPTION)
+
     filename = file.filename
     extension = filename.split('.')[-1]
     if extension.lower() == 'txt':
@@ -273,8 +278,8 @@ async def process_text(file: Annotated[UploadFile, Form(description="Your txt or
 @app.post("/query")
 async def query(question: Annotated[str, Form(description="Question or query to retrieve information from"
                                                           "your vector store")],
-                generate_answer: Annotated[str, Form(description="True if you want to generate an answer, False "
-                                                                 "otherwise")],
+                generate_answer: Optional[str] = Form(None, description="`True` if you want to generate an answer, "
+                                                                        "`False` otherwise"),
                 items: Optional[int] = Form(None, description="Number of items to retrieve"),
                 use_mockup_answer: Optional[str] = Form(None, description="True if you want to return a mockup answer, "
                                                                           "False otherwise (testing purposes only)")):
@@ -291,7 +296,6 @@ async def query(question: Annotated[str, Form(description="Question or query to 
         a json response with fields: `message`, `code`, `result`
     """
     logging.info(f"Triggering {question} towards the index")
-
     try:
         querier = Querier(loader)
         results = querier.retrieve(question, items)
