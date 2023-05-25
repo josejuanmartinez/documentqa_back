@@ -1,4 +1,4 @@
-# Back for Document QA (sintetic.ai)
+# Back for Document QA
 Developed using python, FastAPI, LangChain, OpenAI api and Chroma as Vector Store.
 
 ## Running in dev
