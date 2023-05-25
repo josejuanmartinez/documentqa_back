@@ -24,7 +24,7 @@ To check the API documentation you have 2 endpoints:
 ## Dockerization
 Example of a docker-compose to build an image of the back with the front and a 
 healthchecker manager:
-
+```
 version: '3.3'
 
 services:
@@ -82,3 +82,4 @@ services:
 networks:
   documentqa_network:
       name: documentqa_network
+```
